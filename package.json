@@ -1,0 +1,30 @@
+{
+  "name": "cafeteria-management-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend REST para la app Android de gestión de cafetería",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <27"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node scripts/migrate.js",
+    "bootstrap-owner": "node scripts/bootstrap-owner.js",
+    "test": "node --test",
+    "check": "node scripts/check-syntax.js && node --test"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^16.6.1",
+    "express": "5.3.0",
+    "express-rate-limit": "^8.2.1",
+    "file-type": "^21.1.1",
+    "firebase-admin": "14.5.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {}
+}
