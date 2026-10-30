@@ -1,0 +1,60 @@
+name: Render Free Keep Alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-free-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Render health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate service URL
+        env:
+          RENDER_SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+        run: |
+          if [ -z "$RENDER_SERVICE_URL" ]; then
+            echo "Missing repository variable RENDER_SERVICE_URL"
+            exit 1
+          fi
+          case "$RENDER_SERVICE_URL" in
+            https://*) ;;
+            *) echo "RENDER_SERVICE_URL must start with https://"; exit 1 ;;
+          esac
+
+      - name: Ping backend (retry cold start)
+        env:
+          RENDER_SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+        run: |
+          set -eu
+          URL="${RENDER_SERVICE_URL%/}/health"
+          for attempt in 1 2 3 4 5; do
+            echo "Health check attempt ${attempt}/5: ${URL}"
+            HTTP_CODE=$(curl --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 \
+              --output "$RUNNER_TEMP/render-health.json" \
+              --write-out "%{http_code}" "$URL" || true)
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              cat "$RUNNER_TEMP/render-health.json"
+              echo
+              echo "Render service responded successfully."
+              exit 0
+            fi
+
+            echo "HTTP status: ${HTTP_CODE:-no response}"
+            if [ "$attempt" -lt 5 ]; then sleep 10; fi
+          done
+
+          echo "Render health endpoint did not return HTTP 200."
+          [ ! -f "$RUNNER_TEMP/render-health.json" ] || cat "$RUNNER_TEMP/render-health.json"
+          exit 1
