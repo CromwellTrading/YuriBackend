@@ -41,6 +41,21 @@ test('producto con equivalencia desconocida registra porciones sin inventar rend
   assert.deepEqual(calculateAfterSale(product({ stock_units: 2, stock_subunits: null, subunits_per_unit: null }), 0, 50), { units: 2, subunits: null });
 });
 
+
+test('producto vendido solamente por vasos permite registrar porciones sin stock de recipientes', () => {
+  assert.deepEqual(
+    calculateAfterSale(product({ stock_units: 0, stock_subunits: null, subunits_per_unit: null, sale_mode: 'SUBUNIT' }), 0, 12),
+    { units: 0, subunits: null },
+  );
+});
+
+test('producto vendido solo por porciones con un recipiente registrado conserva ese recipiente sin inventar rendimiento', () => {
+  assert.deepEqual(
+    calculateAfterSale(product({ stock_units: 1, stock_subunits: null, subunits_per_unit: null, sale_mode: 'SUBUNIT' }), 0, 12),
+    { units: 1, subunits: null },
+  );
+});
+
 test('producto sin rendimiento conocido exige que quede un recipiente si se venden porciones', () => {
   assert.throws(() => calculateAfterSale(product({ stock_units: 1, stock_subunits: null, subunits_per_unit: null }), 1, 1), (error) => error instanceof HttpError && error.code === 'INSUFFICIENT_STOCK');
 });

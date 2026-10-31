@@ -25,6 +25,11 @@ export function calculateAfterSale(product, unitQuantity, subunitQuantity) {
   // unit sales consume containers; portion sales are tracked financially but cannot
   // truthfully deduct an unknown number of portions from container stock.
   const currentUnits = Number(product.stock_units);
+  // Portion-only products such as a cup of coffee/chocolate have no countable unit stock
+  // and no known yield. Record the financial quantity without inventing a container deduction.
+  if (product.sale_mode === 'SUBUNIT' && currentUnits === 0 && units === 0 && subunits > 0) {
+    return { units: currentUnits, subunits: null };
+  }
   if (units > currentUnits) {
     throw new HttpError(409, 'INSUFFICIENT_STOCK', 'No hay suficientes unidades completas disponibles.');
   }

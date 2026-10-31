@@ -25,25 +25,27 @@ router.get('/', requireAuth, requireRoles('OWNER'), async (req, res) => {
     [req.auth.businessId, from, to, zone],
   );
   const stockResult = await pool.query(
-    `SELECT COUNT(*) FILTER (WHERE CASE WHEN p.subunits_per_unit IS NOT NULL AND p.sale_mode IN ('SUBUNIT','BOTH') THEN (p.stock_units*p.subunits_per_unit + COALESCE(p.stock_subunits,0)) <= p.minimum_stock*p.subunits_per_unit ELSE p.stock_units <= p.minimum_stock END)::int AS low_stock_count,
+    `SELECT COUNT(*) FILTER (WHERE NOT (p.sale_mode='SUBUNIT' AND p.subunits_per_unit IS NULL AND p.stock_units=0) AND CASE WHEN p.subunits_per_unit IS NOT NULL AND p.sale_mode IN ('SUBUNIT','BOTH') THEN (p.stock_units*p.subunits_per_unit + COALESCE(p.stock_subunits,0)) <= p.minimum_stock*p.subunits_per_unit ELSE p.stock_units <= p.minimum_stock END)::int AS low_stock_count,
       COALESCE(bool_and(
-        CASE WHEN p.sale_mode IN ('SUBUNIT','BOTH') THEN
+        CASE WHEN p.sale_mode='SUBUNIT' AND p.subunits_per_unit IS NULL AND p.stock_units=0 THEN TRUE
+        WHEN p.sale_mode IN ('SUBUNIT','BOTH') THEN
           (p.subunits_per_unit IS NOT NULL AND p.stock_subunits IS NOT NULL AND p.subunit_price_cup IS NOT NULL AND
            (p.sale_mode='SUBUNIT' OR p.unit_price_cup IS NOT NULL))
         ELSE p.unit_price_cup IS NOT NULL END
-        AND (p.sale_mode='UNIT' OR p.subunit_price_cup IS NOT NULL)
       ), TRUE) AS exact_cash,
       COALESCE(bool_and(
-        CASE WHEN p.sale_mode IN ('SUBUNIT','BOTH') THEN
+        CASE WHEN p.sale_mode='SUBUNIT' AND p.subunits_per_unit IS NULL AND p.stock_units=0 THEN TRUE
+        WHEN p.sale_mode IN ('SUBUNIT','BOTH') THEN
           (p.subunits_per_unit IS NOT NULL AND p.stock_subunits IS NOT NULL AND p.subunit_price_transfer IS NOT NULL AND
            (p.sale_mode='SUBUNIT' OR p.unit_price_transfer IS NOT NULL))
         ELSE p.unit_price_transfer IS NOT NULL END
-        AND (p.sale_mode='UNIT' OR p.subunit_price_transfer IS NOT NULL)
       ), TRUE) AS exact_transfer,
-      COALESCE(SUM(CASE WHEN p.sale_mode='UNIT' THEN p.stock_units*p.unit_price_cup
+      COALESCE(SUM(CASE WHEN p.sale_mode='SUBUNIT' AND p.subunits_per_unit IS NULL AND p.stock_units=0 THEN 0
+                        WHEN p.sale_mode='UNIT' THEN p.stock_units*p.unit_price_cup
                         WHEN p.sale_mode='SUBUNIT' THEN (p.stock_units*p.subunits_per_unit + p.stock_subunits)*p.subunit_price_cup
                         ELSE p.stock_units*p.unit_price_cup + p.stock_subunits*p.subunit_price_cup END),0)::bigint AS value_cash,
-      COALESCE(SUM(CASE WHEN p.sale_mode='UNIT' THEN p.stock_units*p.unit_price_transfer
+      COALESCE(SUM(CASE WHEN p.sale_mode='SUBUNIT' AND p.subunits_per_unit IS NULL AND p.stock_units=0 THEN 0
+                        WHEN p.sale_mode='UNIT' THEN p.stock_units*p.unit_price_transfer
                         WHEN p.sale_mode='SUBUNIT' THEN (p.stock_units*p.subunits_per_unit + p.stock_subunits)*p.subunit_price_transfer
                         ELSE p.stock_units*p.unit_price_transfer + p.stock_subunits*p.subunit_price_transfer END),0)::bigint AS value_transfer
      FROM products p WHERE p.business_id=$1 AND p.active=TRUE`, [req.auth.businessId],
@@ -51,7 +53,7 @@ router.get('/', requireAuth, requireRoles('OWNER'), async (req, res) => {
   const stock = stockResult.rows[0];
   // With unknown yield, it is not possible to value the remaining subunits inside containers exactly.
   const unknownYield = await pool.query(
-    `SELECT EXISTS(SELECT 1 FROM products p WHERE p.business_id=$1 AND p.active=TRUE AND p.sale_mode IN ('SUBUNIT','BOTH') AND p.subunits_per_unit IS NULL) AS has_unknown_yield`,
+    `SELECT EXISTS(SELECT 1 FROM products p WHERE p.business_id=$1 AND p.active=TRUE AND p.sale_mode IN ('SUBUNIT','BOTH') AND p.subunits_per_unit IS NULL AND NOT (p.sale_mode='SUBUNIT' AND p.stock_units=0)) AS has_unknown_yield`,
     [req.auth.businessId],
   );
   res.json({ data: {

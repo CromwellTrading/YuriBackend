@@ -1,7 +1,8 @@
 import { publicImageUrl } from '../services/image-storage.js';
 
 export function productDto(row, req, publicView = false) {
-  const available = Number(row.stock_units) > 0 || (row.stock_subunits != null && Number(row.stock_subunits) > 0);
+  const untrackedPortionOnly = row.sale_mode === 'SUBUNIT' && row.subunits_per_unit == null && Number(row.stock_units) === 0;
+  const available = Number(row.stock_units) > 0 || (row.stock_subunits != null && Number(row.stock_subunits) > 0) || untrackedPortionOnly;
   return {
     id: row.id,
     name: row.name,
