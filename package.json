@@ -1,6 +1,6 @@
 {
   "name": "cafeteria-management-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Backend REST para la app Android de gestión de cafetería",
   "type": "module",

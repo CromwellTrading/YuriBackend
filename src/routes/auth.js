@@ -15,6 +15,13 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { data: null, message: 'Demasiados intentos. Espera un momento antes de volver a intentarlo.', code: 'LOGIN_RATE_LIMITED' },
 });
+const customerRegistrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: Number(process.env.CUSTOMER_REGISTER_RATE_LIMIT_MAX || 20),
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { data: null, message: 'Se alcanzó el límite temporal de registros desde esta conexión. Inténtalo más tarde.', code: 'CUSTOMER_REGISTER_RATE_LIMITED' },
+});
 
 function authDto(user, accessToken) {
   return {
@@ -40,6 +47,8 @@ async function issueSession(user, req) {
 }
 
 router.post('/login', loginLimiter, async (req, res) => {
+  // Staff and owner accounts continue using their existing nick/identifier login.
+  // Customers created by the public app use /customer-login with their visible name.
   const identifier = safeString(req.body?.identifier, 'identifier', { min: 3, max: 180, allowEmpty: false });
   const password = req.body?.password;
   if (typeof password !== 'string' || password.length < 1 || password.length > 200) throw unauthorized('El usuario o la contraseña no son correctos.');
@@ -68,7 +77,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   res.json({ data: authDto(user, token), message: 'Sesión iniciada.' });
 });
 
-router.post('/register-customer', async (req, res) => {
+router.post('/register-customer', customerRegistrationLimiter, async (req, res) => {
   const business = await resolvePublicBusiness(req);
   const displayName = safeString(req.body?.displayName, 'displayName', { min: 1, max: 100, allowEmpty: false });
   const identifier = safeString(req.body?.identifier, 'identifier', { min: 3, max: 180, allowEmpty: false });
@@ -93,6 +102,31 @@ router.post('/register-customer', async (req, res) => {
   }
   const accessToken = await issueSession(user, req);
   res.status(201).json({ data: authDto(user, accessToken), message: 'Cuenta de cliente creada.' });
+});
+
+// Customers use their visible name and password. The database identifier is an opaque unique
+// value, so customers can share names without collisions with other customers or staff.
+router.post('/customer-login', loginLimiter, async (req, res) => {
+  const business = await resolvePublicBusiness(req);
+  const displayName = safeString(req.body?.displayName, 'displayName', { min: 1, max: 100, allowEmpty: false });
+  const password = req.body?.password;
+  if (typeof password !== 'string' || password.length < 1 || password.length > 200) {
+    throw unauthorized('El nombre o la contraseña no son correctos.');
+  }
+  const candidates = await pool.query(
+    `SELECT u.*, b.time_zone FROM users u JOIN businesses b ON b.id=u.business_id
+     WHERE u.business_id=$1 AND lower(trim(u.display_name))=lower(trim($2))
+       AND u.role='CUSTOMER' AND u.active=TRUE AND b.active=TRUE
+     ORDER BY u.created_at DESC LIMIT 25`,
+    [business.id, displayName],
+  );
+  let user = null;
+  for (const candidate of candidates.rows) {
+    if (await bcrypt.compare(password, candidate.password_hash)) { user = candidate; break; }
+  }
+  if (!user) throw unauthorized('El nombre o la contraseña no son correctos.');
+  const accessToken = await issueSession(user, req);
+  res.json({ data: authDto(user, accessToken), message: 'Sesión de cliente iniciada.' });
 });
 
 router.post('/logout', requireAuth, async (req, res) => {

@@ -5,6 +5,7 @@ Servidor REST para la app Android de la cafetería. Está diseñado para que la 
 ## Incluye
 
 - Autenticación con contraseñas hash y sesiones Bearer revocables.
+- Registro público de clientes y acceso por nombre/contraseña, limitado al rol `CUSTOMER`; el acceso de dueña/trabajadoras conserva su ruta de autenticación.
 - Roles `OWNER`, `WORKER` y `CUSTOMER`, con permisos aplicados en el servidor.
 - Separación de datos por cafetería (`business_id`) en todas las consultas y escrituras.
 - Catálogo público con disponibilidad sin revelar cantidades exactas de inventario; inventario detallado solo para dueña/trabajadoras autenticadas.
@@ -120,7 +121,8 @@ Todas las respuestas usan `{ "data": ..., "message": "...", "code": "..." }`. Im
 | `POST` | `/api/v1/auth/login` | Público | Iniciar sesión |
 | `GET` | `/api/v1/auth/me` | Sesión | Datos de la sesión |
 | `POST` | `/api/v1/auth/logout` | Sesión | Revocar sesión |
-| `POST` | `/api/v1/auth/register-customer` | Público | Registro opcional de clientes |
+| `POST` | `/api/v1/auth/register-customer` | Público | Registro de clientes (límite por IP) |
+| `POST` | `/api/v1/auth/customer-login` | Público | Acceso de cliente por nombre y contraseña |
 | `GET` | `/api/v1/businesses` | Público | Directorio para instalación multi-negocio |
 | `GET` | `/api/v1/products` | Público o sesión | Catálogo público / inventario de equipo |
 | `POST` | `/api/v1/products` | Dueña | Crear producto e inventario inicial |

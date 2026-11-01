@@ -20,9 +20,13 @@ Request: `{"identifier":"usuario-o-correo","password":"..."}`. Devuelve `accessT
 
 `me` devuelve los datos de la sesión. `logout` revoca la sesión actual. Desactivar una trabajadora bloquea nuevos logins y revoca sus sesiones vigentes.
 
-### POST `/api/v1/auth/register-customer` (extra)
+### POST `/api/v1/auth/register-customer` (público)
 
-Crea una cuenta `CUSTOMER` en el negocio público resuelto. Request: `displayName`, `identifier`, `password` (mínimo 10 caracteres). El catálogo público no requiere cuenta.
+Crea una cuenta `CUSTOMER` en el negocio público resuelto. Request: `displayName`, `identifier` (identificador interno `customer-` + UUID generado por la app), `password` (mínimo 10 caracteres). El identificador interno no se muestra al cliente; el nombre visible puede repetirse. El registro tiene un límite de frecuencia dedicado.
+
+### POST `/api/v1/auth/customer-login` (público)
+
+Request: `displayName`, `password`. Busca cuentas `CUSTOMER` por nombre visible dentro del negocio público y verifica la contraseña con bcrypt. No autentica cuentas `OWNER` ni `WORKER`; esas usan `/auth/login` desde el acceso separado del personal. La app Android exige iniciar sesión antes de abrir el catálogo, aunque el endpoint de consulta pública del catálogo continúe aceptando solicitudes sin token.
 
 ## Productos
 
@@ -124,5 +128,5 @@ Devuelve lista pública de negocios activos para una app multi-cafetería. En un
 - `404 NOT_FOUND`: recurso no encontrado dentro del negocio autenticado.
 - `409`: conflicto de inventario, versión, clave idempotente o negocio.
 - `422`: solicitud o cantidades no válidas.
-- `429 RATE_LIMITED` / `LOGIN_RATE_LIMITED`: límite temporal de solicitudes.
+- `429 RATE_LIMITED` / `LOGIN_RATE_LIMITED` / `CUSTOMER_REGISTER_RATE_LIMITED`: límite temporal de solicitudes.
 - `5xx`: error temporal; la venta local debe conservarse y puede reintentarse con idéntico cuerpo.
