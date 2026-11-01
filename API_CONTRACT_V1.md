@@ -14,7 +14,7 @@ Toda tabla de negocio lleva `business_id`; la API deriva el negocio de la sesió
 
 ### POST `/api/v1/auth/login`
 
-Request: `{"identifier":"usuario-o-correo","password":"..."}`. Devuelve `accessToken`, `userId`, `displayName`, `role`, `businessId`, `businessTimeZone`. El token es opaco, aleatorio y caduca en `SESSION_DAYS` (por defecto 30 días). Solo su hash se almacena en PostgreSQL.
+Request: `{"identifier":"nombre-o-usuario","password":"..."}`. Es el acceso único para todos los perfiles. `OWNER` y `WORKER` se validan por el identificador creado por la dueña; si no coincide, busca `CUSTOMER` por nombre visible y contraseña dentro del negocio público configurado. Devuelve el rol real guardado en la base de datos; el cliente no puede elegirlo. Devuelve `accessToken`, `userId`, `displayName`, `role`, `businessId` y `businessTimeZone`. El token es opaco, aleatorio y caduca en `SESSION_DAYS` (por defecto 30 días). Solo su hash se almacena en PostgreSQL.
 
 ### GET `/api/v1/auth/me`, POST `/api/v1/auth/logout`
 
@@ -26,7 +26,7 @@ Crea una cuenta `CUSTOMER` en el negocio público resuelto. Request: `displayNam
 
 ### POST `/api/v1/auth/customer-login` (público)
 
-Request: `displayName`, `password`. Busca cuentas `CUSTOMER` por nombre visible dentro del negocio público y verifica la contraseña con bcrypt. No autentica cuentas `OWNER` ni `WORKER`; esas usan `/auth/login` desde el acceso separado del personal. La app Android exige iniciar sesión antes de abrir el catálogo, aunque el endpoint de consulta pública del catálogo continúe aceptando solicitudes sin token.
+Request legado para versiones anteriores: `displayName`, `password`. Las versiones nuevas usan `/auth/login` para todos los perfiles. La app Android exige iniciar sesión antes de abrir el catálogo, aunque el endpoint de consulta pública del catálogo continúe aceptando solicitudes sin token.
 
 ## Productos
 

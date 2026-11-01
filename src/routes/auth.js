@@ -47,32 +47,79 @@ async function issueSession(user, req) {
 }
 
 router.post('/login', loginLimiter, async (req, res) => {
-  // Staff and owner accounts continue using their existing nick/identifier login.
-  // Customers created by the public app use /customer-login with their visible name.
-  const identifier = safeString(req.body?.identifier, 'identifier', { min: 3, max: 180, allowEmpty: false });
+  // One shared login for the owner, workers and customers.
+  // OWNER/WORKER accounts are matched by the username Yuri created.
+  // CUSTOMER accounts are matched by their visible display name.
+  const identifier = safeString(req.body?.identifier, 'identifier', { min: 1, max: 180, allowEmpty: false });
   const password = req.body?.password;
-  if (typeof password !== 'string' || password.length < 1 || password.length > 200) throw unauthorized('El usuario o la contraseña no son correctos.');
+  if (typeof password !== 'string' || password.length < 1 || password.length > 200) {
+    throw unauthorized('El nombre o usuario y la contraseña no son correctos.');
+  }
   const normalized = normalizeIdentifier(identifier);
   const configuredSlug = String(process.env.PUBLIC_BUSINESS_SLUG || '').trim().toLowerCase();
   const requestedSlug = String(req.get('x-business-slug') || '').trim().toLowerCase();
-  if (configuredSlug && requestedSlug && configuredSlug !== requestedSlug) throw conflict('BUSINESS_SELECTION_REQUIRED', 'Esta instalación no corresponde a la cafetería solicitada.');
+  if (configuredSlug && requestedSlug && configuredSlug !== requestedSlug) {
+    throw conflict('BUSINESS_SELECTION_REQUIRED', 'Esta instalación no corresponde a la cafetería solicitada.');
+  }
   const slug = configuredSlug || requestedSlug;
-  let result;
+
+  // Preserve the existing staff lookup and its protection against ambiguous usernames
+  // when this backend serves more than one business.
+  let staffResult;
   if (slug) {
-    result = await pool.query(
-      `SELECT u.*, b.time_zone, b.active AS business_active FROM users u JOIN businesses b ON b.id=u.business_id
-       WHERE u.identifier_norm=$1 AND b.slug=$2 AND u.active=TRUE AND b.active=TRUE LIMIT 1`, [normalized, slug],
+    staffResult = await pool.query(
+      `SELECT u.*, b.time_zone, b.active AS business_active
+       FROM users u JOIN businesses b ON b.id=u.business_id
+       WHERE u.identifier_norm=$1 AND b.slug=$2 AND u.active=TRUE AND b.active=TRUE
+       ORDER BY CASE WHEN u.role='OWNER' THEN 0 WHEN u.role='WORKER' THEN 1 ELSE 2 END
+       LIMIT 2`, [normalized, slug],
     );
   } else {
-    result = await pool.query(
-      `SELECT u.*, b.time_zone, b.active AS business_active FROM users u JOIN businesses b ON b.id=u.business_id
-       WHERE u.identifier_norm=$1 AND u.active=TRUE AND b.active=TRUE ORDER BY u.created_at LIMIT 2`, [normalized],
+    staffResult = await pool.query(
+      `SELECT u.*, b.time_zone, b.active AS business_active
+       FROM users u JOIN businesses b ON b.id=u.business_id
+       WHERE u.identifier_norm=$1 AND u.active=TRUE AND b.active=TRUE
+       ORDER BY CASE WHEN u.role='OWNER' THEN 0 WHEN u.role='WORKER' THEN 1 ELSE 2 END, u.created_at
+       LIMIT 2`, [normalized],
     );
-    if (result.rowCount > 1) throw conflict('BUSINESS_SELECTION_REQUIRED', 'Indica qué cafetería corresponde a esta cuenta.');
+    if (staffResult.rowCount > 1) {
+      throw conflict('BUSINESS_SELECTION_REQUIRED', 'Indica qué cafetería corresponde a esta cuenta.');
+    }
   }
-  const user = result.rows[0];
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) throw unauthorized('El usuario o la contraseña no son correctos.');
-  if (!validateTimeZone(user.time_zone)) throw new HttpError(500, 'BUSINESS_TIME_ZONE_INVALID', 'La configuración horaria del negocio necesita revisión.');
+
+  let user = null;
+  for (const candidate of staffResult.rows) {
+    if (await bcrypt.compare(password, candidate.password_hash)) {
+      user = candidate;
+      break;
+    }
+  }
+
+  // Customers do not choose an internal username. Their visible name plus password
+  // identifies their customer account within the configured public cafeteria.
+  if (!user) {
+    const business = await resolvePublicBusiness(req);
+    const customerCandidates = await pool.query(
+      `SELECT u.*, b.time_zone, b.active AS business_active
+       FROM users u JOIN businesses b ON b.id=u.business_id
+       WHERE u.business_id=$1 AND u.role='CUSTOMER' AND u.active=TRUE AND b.active=TRUE
+         AND lower(trim(u.display_name))=lower(trim($2))
+       ORDER BY u.created_at DESC
+       LIMIT 25`,
+      [business.id, identifier],
+    );
+    for (const candidate of customerCandidates.rows) {
+      if (await bcrypt.compare(password, candidate.password_hash)) {
+        user = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!user) throw unauthorized('El nombre o usuario y la contraseña no son correctos.');
+  if (!validateTimeZone(user.time_zone)) {
+    throw new HttpError(500, 'BUSINESS_TIME_ZONE_INVALID', 'La configuración horaria del negocio necesita revisión.');
+  }
   const token = await issueSession(user, req);
   res.json({ data: authDto(user, token), message: 'Sesión iniciada.' });
 });
