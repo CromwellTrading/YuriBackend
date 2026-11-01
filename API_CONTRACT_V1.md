@@ -130,3 +130,13 @@ Devuelve lista pública de negocios activos para una app multi-cafetería. En un
 - `422`: solicitud o cantidades no válidas.
 - `429 RATE_LIMITED` / `LOGIN_RATE_LIMITED` / `CUSTOMER_REGISTER_RATE_LIMITED`: límite temporal de solicitudes.
 - `5xx`: error temporal; la venta local debe conservarse y puede reintentarse con idéntico cuerpo.
+
+
+## Estadísticas extendidas (`GET /api/v1/dashboard`)
+
+Disponible solo para `OWNER`. Acepta `from` y `to` ISO-8601 con offset; `from` se incluye y `to` se excluye. Además de `cashCup`, `transferCup`, `saleCount`, inventario, devuelve:
+
+- `productSales[]`: `productId`, `productName`, `unitName`, `subunitName`, `unitQuantity`, `subunitQuantity`, `totalCup`, `cashCup`, `transferCup`. Las cantidades se suman desde las líneas `sale_items` de ventas aceptadas y no dependen del stock configurado.
+- `workerSales[]`: `workerId`, `workerName`, `saleCount`, `cashCup`, `transferCup`, `totalCup`, `unitQuantity`, `subunitQuantity`. Los importes se agregan desde `sales` y las cantidades desde `sale_items`, sin multiplicar importes por el número de artículos de cada venta.
+
+Las ventas `REVERSED` no se incluyen. El servidor aplica el intervalo a `sales.sold_at`, que conserva la hora original de la venta.

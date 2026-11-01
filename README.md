@@ -167,3 +167,8 @@ Consulta [`VALIDATION.md`](VALIDATION.md) para distinguir las pruebas unitarias 
 - El servicio registra transferencias declaradas; no comprueba automáticamente una transacción bancaria.
 - El envío push es de tipo al menos una vez: las filas se reintentan y se deduplican en cola, pero una caída de red justo después de que FCM acepte el mensaje puede causar una notificación repetida.
 - Se debe configurar respaldo automático de PostgreSQL y probar su restauración antes de usar con dinero real.
+
+
+## Estadísticas de ventas por producto y trabajadora (1.3.0)
+
+`GET /api/v1/dashboard?from=<ISO-8601>&to=<ISO-8601>` sigue siendo exclusivo de `OWNER`. Además de los totales existentes, devuelve `productSales` y `workerSales`. `productSales` suma `unit_quantity` y `subunit_quantity` en las líneas de ventas aceptadas, sin consultar el stock actual. `workerSales` agrupa operaciones e importes por cada identidad de trabajadora. Los importes se separan por `CASH_CUP` y `TRANSFER_CUP`. El intervalo es inclusivo en `from` y exclusivo en `to`. No hay migración nueva.
